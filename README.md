@@ -13,11 +13,11 @@ Create key-pair: VocareumUdagramKey.pem
 
 1. Run network.yaml file with batch script:
 ```
-./create.sh networkStack ./yaml/network.yml ./yaml-parameters/network-parameters.json
+./create.sh networkStack ../configs/network.yml ../configs/network-parameters.json
 ```
 2. Run server.yaml file
 ```
-./create.sh serverStack ./yaml/server.yml /yaml-parameters/server-parameters.json
+./create.sh serverStack ../configs/server.yml ../configs/server-parameters.json
 ```
 
 Refer to build/README.md
