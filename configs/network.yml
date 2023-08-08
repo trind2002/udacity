@@ -160,7 +160,7 @@ Resources:
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
-# There are output values you need to: import into udagramInfra stack (udagramInfra.yml)
+# There are output values you need to: import into serverStack (server.yml)
 Outputs:
   UdagramVPC: 
     Description: A reference to the created Udagram VPC
