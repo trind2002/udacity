@@ -92,7 +92,6 @@ Resources:
             sudo chmod -R 777 /var/www/html/
             echo "it works! Udagram, Udacity" > index.html
         ImageId: !Ref AMItoUse
-        KeyName: VocareumUdagramKey
         InstanceType: t3.medium
         BlockDeviceMappings:
         - DeviceName: "/dev/sdk"
