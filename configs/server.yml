@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+    Tri Nguyen Duc / Udagram Project
+Parameters:
+  EnvironmentName: 
+    Type: String
+  myLaunchTemplateVersionNumber:
+    Type: String
+  AMItoUse:
+    Description: Amazon Machine Image (AMI) ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-20230531
+    Type: String
+Resources:
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+        Description: "Allow all egress traffic by default"
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+        Description: "Allow ingress to the default HTTP port: 80 for load balancer health check"
+  # IAM Role to allow EC2 Session Manager to access our server
+  RoleForSSMAccess: 
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  # Instance Profile
+  ServerInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Roles: 
+        - !Ref RoleForSSMAccess
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our hosts and SSH from local only
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: "Allow ingress to the default HTTP port: 80 for load balancer health check"
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Allow all egress traffic by default"
+  WebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateData:
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: "true"
+            Groups:
+            - Ref: WebServerSecGroup
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo apt-get update -y
+            sudo apt-get install apache2 -y
+            sudo systemctl start apache2.service
+            cd /var/www/html
+            sudo chmod -R 777 /var/www/html/
+            echo "it works! Udagram, Udacity" > index.html
+        ImageId: !Ref AMItoUse
+        KeyName: VocareumUdagramKey
+        InstanceType: t3.medium
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
+  WebAppGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+      - Fn::ImportValue: 
+          !Sub "${EnvironmentName}-PRIV-NETS"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebAppLaunchTemplate
+        Version: !Ref myLaunchTemplateVersionNumber
+      MinSize: '4'
+      MaxSize: '6'
+      TargetGroupARNs:
+      - Ref: WebAppTargetGroup
+      CapacityRebalance: 'true'
+      HealthCheckType: ELB
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB1-SN"
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
+      SecurityGroups:
+      - Ref: LBSecGroup
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'
+      Protocol: HTTP
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref 'WebAppTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref 'Listener'
+      Priority: 1
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"
+Outputs:
+  WebAppLoadBalancerURL:
+    Description: "Load balancer URL within the http:// in front"
+    Value: !GetAtt WebAppLB.DNSName
+    Export:
+      Name: !Sub ${EnvironmentName}-LB-DNS

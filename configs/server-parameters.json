@@ -1,0 +1,14 @@
+[
+    {
+		"ParameterKey": "EnvironmentName",
+		"ParameterValue": "UdagramProject"
+	},
+	{
+		"ParameterKey": "myLaunchTemplateVersionNumber",
+		"ParameterValue": "1"
+	},
+	{
+		"ParameterKey": "AMItoUse",
+		"ParameterValue": "ami-0263e4deb427da90e"
+	}
+]
